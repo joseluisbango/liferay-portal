@@ -174,8 +174,6 @@ definition {
 	macro authorizeMyApplication {
 		if ("${newTab}" == "true") {
 			Open.openInTheNewTab(locator1 = "http://martamedio.com/oauth2-tester/");
-
-			SelectWindow.selectPopUp(locator1 = "null");
 		}
 		else {
 			Navigator.openSpecificURL(url = "http://martamedio.com/oauth2-tester/");
@@ -879,7 +877,7 @@ definition {
 
 	macro viewAuthorizationRequestResourceName {
 		AssertElementPresent(
-			key_resourceName = "resourceName",
+			key_resourceName = "${resourceName}",
 			locator1 = "OAuth2#AUTHORIZATION_REQUEST_RESOURCE_NAME");
 	}
 

@@ -12,10 +12,17 @@
  * details.
  */
 
+import ClayForm, {ClayCheckbox} from '@clayui/form';
 import ClayIcon from '@clayui/icon';
 import ClayTabs from '@clayui/tabs';
 import {useIsMounted, usePrevious} from '@liferay/frontend-js-react-web';
-import {cancelDebounce, debounce, fetch, openToast} from 'frontend-js-web';
+import {
+	cancelDebounce,
+	debounce,
+	fetch,
+	objectToFormData,
+	openToast,
+} from 'frontend-js-web';
 import React, {useCallback, useEffect, useState} from 'react';
 
 import CodeMirrorEditor from './CodeMirrorEditor';
@@ -37,16 +44,19 @@ const FragmentEditor = ({
 		autocompleteTags,
 		cacheable,
 		dataAttributes,
+		fieldTypes: availableFieldTypes,
 		fragmentCollectionId,
 		fragmentEntryId,
 		htmlEditorCustomEntities,
 		initialCSS,
 		initialConfiguration,
+		initialFieldTypes,
 		initialHTML,
 		initialJS,
 		name,
 		propagationEnabled,
 		readOnly,
+		showFieldTypes,
 		urls,
 	},
 }) => {
@@ -57,10 +67,11 @@ const FragmentEditor = ({
 	const [css, setCss] = useState(initialCSS);
 	const [html, setHtml] = useState(initialHTML);
 	const [js, setJs] = useState(initialJS);
-
+	const [fieldTypes, setFieldTypes] = useState(initialFieldTypes);
 	const previousConfiguration =
 		usePrevious(configuration) || initialConfiguration;
 	const previousCss = usePrevious(css) || initialCSS;
+	const previousFieldTypes = usePrevious(fieldTypes) || initialFieldTypes;
 	const previousHtml = usePrevious(html) || initialHTML;
 	const previousJs = usePrevious(js) || initialJS;
 
@@ -70,6 +81,7 @@ const FragmentEditor = ({
 		return (
 			previousConfiguration !== configuration ||
 			previousCss !== css ||
+			previousFieldTypes.length !== fieldTypes.length ||
 			previousHtml !== html ||
 			previousJs !== js ||
 			cacheable !== isCacheable
@@ -78,14 +90,21 @@ const FragmentEditor = ({
 		cacheable,
 		configuration,
 		css,
+		fieldTypes,
 		html,
 		previousCss,
 		previousConfiguration,
+		previousFieldTypes,
 		previousHtml,
 		previousJs,
 		isCacheable,
 		js,
 	]);
+
+	const onAddFieldType = (type) => setFieldTypes([...fieldTypes, type]);
+
+	const onRemoveFieldType = (type) =>
+		setFieldTypes(fieldTypes.filter((fieldType) => fieldType !== type));
 
 	const publish = () => {
 		const formData = new FormData();
@@ -131,23 +150,21 @@ const FragmentEditor = ({
 		debounce(() => {
 			setChangesStatus(CHANGES_STATUS.saving);
 
-			const formData = new FormData();
-
-			formData.append(`${namespace}cacheable`, isCacheable);
-			formData.append(`${namespace}configurationContent`, configuration);
-			formData.append(`${namespace}cssContent`, css);
-			formData.append(`${namespace}htmlContent`, html);
-			formData.append(
-				`${namespace}fragmentCollectionId`,
-				fragmentCollectionId
-			);
-			formData.append(`${namespace}fragmentEntryId`, fragmentEntryId);
-			formData.append(`${namespace}jsContent`, js);
-			formData.append(`${namespace}name`, name);
-			formData.append(`${namespace}status`, allowedStatus.draft);
+			const data = {
+				cacheable: isCacheable,
+				configurationContent: configuration,
+				cssContent: css,
+				fieldTypes,
+				fragmentCollectionId,
+				fragmentEntryId,
+				htmlContent: html,
+				jsContent: js,
+				name,
+				status: allowedStatus.draft,
+			};
 
 			fetch(urls.edit, {
-				body: formData,
+				body: objectToFormData(Liferay.Util.ns(namespace, data)),
 				method: 'POST',
 			})
 				.then((response) => response.json())
@@ -177,7 +194,7 @@ const FragmentEditor = ({
 					});
 				});
 		}, 500),
-		[configuration, css, html, isCacheable, js]
+		[configuration, css, fieldTypes, html, isCacheable, js]
 	);
 
 	const previousSaveDraft = usePrevious(saveDraft);
@@ -374,18 +391,107 @@ const FragmentEditor = ({
 				</ClayTabs.TabPane>
 
 				<ClayTabs.TabPane aria-labelledby="configuration">
-					<div className="fragment-editor">
-						<CodeMirrorEditor
-							content={initialConfiguration}
-							mode="json"
-							onChange={setConfiguration}
-							readOnly={readOnly}
-						/>
+					<div className="fragment-editor fragment-editor__configuration">
+						<div className="sheet sheet-lg">
+							{showFieldTypes && (
+								<FieldTypeSelector
+									availableFieldTypes={availableFieldTypes}
+									fieldTypes={fieldTypes}
+									onAddFieldType={onAddFieldType}
+									onRemoveFieldType={onRemoveFieldType}
+									readOnly={readOnly}
+								/>
+							)}
+
+							<ClayForm.Group>
+								<div className="sheet-section">
+									<p className="sheet-subtitle">json</p>
+
+									<p>
+										{Liferay.Language.get(
+											'add-the-json-configuration'
+										)}
+									</p>
+
+									<CodeMirrorEditor
+										content={initialConfiguration}
+										mode="json"
+										onChange={setConfiguration}
+										readOnly={readOnly}
+										showHeader={false}
+									/>
+								</div>
+							</ClayForm.Group>
+						</div>
 					</div>
 				</ClayTabs.TabPane>
 			</ClayTabs.Content>
 		</div>
 	);
 };
+
+function FieldTypeSelector({
+	availableFieldTypes,
+	fieldTypes,
+	onAddFieldType,
+	onRemoveFieldType,
+	readOnly,
+}) {
+	if (readOnly) {
+		return fieldTypes.length ? (
+			<ClayForm.Group>
+				<div className="sheet-section">
+					<p className="sheet-subtitle">
+						{Liferay.Language.get('field-types')}
+					</p>
+
+					{fieldTypes.map((fieldType) => {
+						const label = availableFieldTypes.find(
+							({key}) => key === fieldType
+						).label;
+
+						return (
+							<p className="mb-1" key={fieldType}>
+								{label}
+							</p>
+						);
+					})}
+				</div>
+			</ClayForm.Group>
+		) : null;
+	}
+
+	return (
+		<ClayForm.Group>
+			<div className="sheet-section">
+				<p className="sheet-subtitle">
+					{Liferay.Language.get('field-types')}
+				</p>
+
+				<p>
+					{Liferay.Language.get(
+						'specify-which-field-types-this-fragment-supports'
+					)}
+				</p>
+
+				<div>
+					{availableFieldTypes.map(({key, label}) => (
+						<ClayCheckbox
+							aria-label={label}
+							checked={fieldTypes.includes(key)}
+							key={key}
+							label={label}
+							onChange={(event) =>
+								event.target.checked
+									? onAddFieldType(key)
+									: onRemoveFieldType(key)
+							}
+						/>
+					))}
+				</div>
+			</div>
+		</ClayForm.Group>
+	);
+}
 
 export default FragmentEditor;

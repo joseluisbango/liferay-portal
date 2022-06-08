@@ -1371,9 +1371,16 @@ public class PortalImpl implements Portal {
 				pos = completeURL.indexOf(urlSeparator);
 
 				if (pos != -1) {
-					includeParametersURL = true;
+					if (StringUtil.contains(
+							layout.getFriendlyURL(), urlSeparator)) {
 
-					break;
+						pos = -1;
+					}
+					else {
+						includeParametersURL = true;
+
+						break;
+					}
 				}
 			}
 
@@ -6047,6 +6054,17 @@ public class PortalImpl implements Portal {
 	}
 
 	@Override
+	public boolean isControlPanelPath(String path) {
+		if (Validator.isNull(path)) {
+			return false;
+		}
+
+		return path.contains(
+			VirtualLayoutConstants.CANONICAL_URL_SEPARATOR +
+				GroupConstants.CONTROL_PANEL_FRIENDLY_URL);
+	}
+
+	@Override
 	public boolean isControlPanelPortlet(
 		String portletId, String category, ThemeDisplay themeDisplay) {
 
@@ -8801,7 +8819,7 @@ public class PortalImpl implements Portal {
 			if (groupFriendlyURL.contains(
 					StringBundler.concat(
 						_PUBLIC_GROUP_SERVLET_MAPPING, siteGroupFriendlyURL,
-						layoutFriendlyURL))) {
+						StringUtil.toLowerCase(layoutFriendlyURL)))) {
 
 				return true;
 			}
