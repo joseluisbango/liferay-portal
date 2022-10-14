@@ -115,10 +115,6 @@ public class PersonalApplicationURLUtil {
 				controlPanelLayout = true;
 			}
 
-			if (currentLayout.isPublicLayout()) {
-				privateLayout = false;
-			}
-
 			user = UserLocalServiceUtil.getDefaultUser(
 				themeDisplay.getCompanyId());
 		}
