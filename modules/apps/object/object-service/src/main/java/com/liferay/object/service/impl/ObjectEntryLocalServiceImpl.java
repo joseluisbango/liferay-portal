@@ -138,7 +138,6 @@ import com.liferay.portal.search.searcher.SearchRequestBuilder;
 import com.liferay.portal.search.searcher.SearchRequestBuilderFactory;
 import com.liferay.portal.search.searcher.SearchResponse;
 import com.liferay.portal.search.searcher.Searcher;
-import com.liferay.portal.search.sort.SortFieldBuilder;
 import com.liferay.portal.search.sort.SortOrder;
 import com.liferay.portal.search.sort.Sorts;
 import com.liferay.portal.vulcan.util.TransformUtil;
@@ -266,24 +265,8 @@ public class ObjectEntryLocalServiceImpl
 		insertIntoOrUpdateExtensionTable(
 			objectDefinition.getObjectDefinitionId(), primaryKey, values);
 
-		DynamicObjectDefinitionTable extensionDynamicObjectDefinitionTable =
-			_getExtensionDynamicObjectDefinitionTable(
-				objectDefinition.getObjectDefinitionId());
-
-		DSLQuery dslQuery = _getExtensionDynamicObjectDefinitionTableDSLQuery(
-			extensionDynamicObjectDefinitionTable, primaryKey,
-			_getSelectExpressions(extensionDynamicObjectDefinitionTable));
-
-		StringBundler sb = new StringBundler();
-
-		dslQuery.toSQL(sb::append, new DefaultASTNodeListener());
-
-		FinderCacheUtil.removeResult(
-			new FinderPath(
-				FinderPath.encodeDSLQueryCacheName(
-					new String[] {objectDefinition.getExtensionDBTableName()}),
-				"dslQuery", sb.getStrings(), new String[0], false),
-			new Long[] {primaryKey});
+		_clearExtensionDynamicObjectDefinitionTableCache(
+			objectDefinition.getObjectDefinitionId(), primaryKey);
 	}
 
 	@Override
@@ -349,6 +332,9 @@ public class ObjectEntryLocalServiceImpl
 		_deleteFileEntries(
 			Collections.emptyMap(), objectDefinition.getObjectDefinitionId(),
 			extensionDynamicObjectDefinitionTableValues);
+
+		_clearExtensionDynamicObjectDefinitionTableCache(
+			objectDefinition.getObjectDefinitionId(), primaryKey);
 	}
 
 	@Override
@@ -527,7 +513,7 @@ public class ObjectEntryLocalServiceImpl
 			extensionDynamicObjectDefinitionTable);
 
 		List<Object[]> rows = _list(
-			_getExtensionDynamicObjectDefinitionTableDSLQuery(
+			_getExtensionDynamicObjectDefinitionTableSelectDSLQuery(
 				extensionDynamicObjectDefinitionTable, primaryKey,
 				selectExpressions),
 			selectExpressions);
@@ -959,16 +945,9 @@ public class ObjectEntryLocalServiceImpl
 		DynamicObjectDefinitionTable dynamicObjectDefinitionTable =
 			_getExtensionDynamicObjectDefinitionTable(objectDefinitionId);
 
-		Column<DynamicObjectDefinitionTable, Long> primaryKeyColumn =
-			dynamicObjectDefinitionTable.getPrimaryKeyColumn();
-
 		int count = objectEntryPersistence.dslQueryCount(
-			DSLQueryFactoryUtil.count(
-			).from(
-				dynamicObjectDefinitionTable
-			).where(
-				primaryKeyColumn.eq(primaryKey)
-			));
+			_getExtensionDynamicObjectDefinitionTableCountDSLQuery(
+				dynamicObjectDefinitionTable, primaryKey));
 
 		if (count > 0) {
 			_updateTable(dynamicObjectDefinitionTable, primaryKey, values);
@@ -1273,6 +1252,40 @@ public class ObjectEntryLocalServiceImpl
 		}
 	}
 
+	private void _clearExtensionDynamicObjectDefinitionTableCache(
+			long objectDefinitionId, long primaryKey)
+		throws PortalException {
+
+		DynamicObjectDefinitionTable extensionDynamicObjectDefinitionTable =
+			_getExtensionDynamicObjectDefinitionTable(objectDefinitionId);
+
+		String tableName = extensionDynamicObjectDefinitionTable.getTableName();
+
+		_clearFinderCache(
+			_getExtensionDynamicObjectDefinitionTableCountDSLQuery(
+				extensionDynamicObjectDefinitionTable, primaryKey),
+			primaryKey, tableName);
+		_clearFinderCache(
+			_getExtensionDynamicObjectDefinitionTableSelectDSLQuery(
+				extensionDynamicObjectDefinitionTable, primaryKey,
+				_getSelectExpressions(extensionDynamicObjectDefinitionTable)),
+			primaryKey, tableName);
+	}
+
+	private void _clearFinderCache(
+		DSLQuery dslQuery, long primaryKey, String tableName) {
+
+		StringBundler sb = new StringBundler();
+
+		dslQuery.toSQL(sb::append, new DefaultASTNodeListener());
+
+		FinderCacheUtil.removeResult(
+			new FinderPath(
+				FinderPath.encodeDSLQueryCacheName(new String[] {tableName}),
+				"dslQuery", sb.getStrings(), new String[0], false),
+			new Long[] {primaryKey});
+	}
+
 	private void _deleteFileEntries(
 		Map<String, Serializable> newValues, long objectDefinitionId,
 		Map<String, Serializable> oldValues) {
@@ -1475,7 +1488,22 @@ public class ObjectEntryLocalServiceImpl
 			objectDefinition.getExtensionDBTableName());
 	}
 
-	private DSLQuery _getExtensionDynamicObjectDefinitionTableDSLQuery(
+	private DSLQuery _getExtensionDynamicObjectDefinitionTableCountDSLQuery(
+		DynamicObjectDefinitionTable extensionDynamicObjectDefinitionTable,
+		long primaryKey) {
+
+		return DSLQueryFactoryUtil.count(
+		).from(
+			extensionDynamicObjectDefinitionTable
+		).where(
+			extensionDynamicObjectDefinitionTable.getPrimaryKeyColumn(
+			).eq(
+				primaryKey
+			)
+		);
+	}
+
+	private DSLQuery _getExtensionDynamicObjectDefinitionTableSelectDSLQuery(
 		DynamicObjectDefinitionTable extensionDynamicObjectDefinitionTable,
 		long primaryKey, Expression<?>[] selectExpressions) {
 
@@ -3096,9 +3124,6 @@ public class ObjectEntryLocalServiceImpl
 
 	@Reference
 	private SearchRequestBuilderFactory _searchRequestBuilderFactory;
-
-	@Reference
-	private SortFieldBuilder _sortFieldBuilder;
 
 	@Reference
 	private Sorts _sorts;

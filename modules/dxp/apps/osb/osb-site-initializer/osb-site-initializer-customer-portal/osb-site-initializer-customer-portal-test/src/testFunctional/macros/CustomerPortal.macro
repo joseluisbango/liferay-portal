@@ -36,6 +36,18 @@ definition {
 		Alert.viewSuccessMessage();
 	}
 
+	macro activeStatusViaDropdown {
+		Click(locator1 = "CustomerPortalSite#DROPDOWN_STATUS");
+
+		CP2ActivationKeys.clickAtDropdownItem(dropdownItem = "${dropdownItem}");
+
+		Type(
+			locator1 = "CustomerPortalSite#ID_CONFIRMATION",
+			value1 = "${value}");
+
+		CustomerPortal.clickAtButton(text = "Confirm");
+	}
+
 	macro addCPObject {
 		ApplicationsMenu.gotoPortlet(
 			category = "Object",

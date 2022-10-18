@@ -24,12 +24,14 @@ import {
 	useIsMounted,
 } from '@liferay/frontend-js-react-web';
 import {navigate, openToast} from 'frontend-js-web';
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 import {config} from '../../../app/config/index';
 import {useDispatch, useSelector} from '../../../app/contexts/StoreContext';
 import selectCanUpdateExperiences from '../../../app/selectors/selectCanUpdateExperiences';
 import selectCanUpdateSegments from '../../../app/selectors/selectCanUpdateSegments';
+import getKeyboardFocusableElements from '../../../app/utils/getKeyboardFocusableElements';
+import {useId} from '../../../core/hooks/useId';
 import {useSessionState} from '../../../core/hooks/useSessionState';
 import createExperience from '../thunks/createExperience';
 import duplicateExperience from '../thunks/duplicateExperience';
@@ -39,6 +41,24 @@ import updateExperiencePriority from '../thunks/updateExperiencePriority';
 import {useDebounceCallback} from '../utils';
 import ExperienceModal from './ExperienceModal';
 import ExperiencesList from './ExperiencesList';
+
+const useOnClickOutside = (ref, handler) => {
+	useEffect(() => {
+		const listener = (event) => {
+			if (!ref.current || ref.current.contains(event.target)) {
+				return;
+			}
+			handler(event);
+		};
+		document.addEventListener('mousedown', listener);
+		document.addEventListener('touchstart', listener);
+
+		return () => {
+			document.removeEventListener('mousedown', listener);
+			document.removeEventListener('touchstart', listener);
+		};
+	}, [ref, handler]);
+};
 
 /**
  * It produces an object with a target and subtarget keys indicating what experiences
@@ -83,6 +103,7 @@ const ExperienceSelector = ({
 	const canUpdateSegments = useSelector(selectCanUpdateSegments);
 
 	const buttonRef = useRef();
+	const selectorRef = useRef();
 	const [buttonBoundingClientRect, setButtonBoundingClientRect] = useState({
 		bottom: 0,
 		left: 0,
@@ -103,6 +124,7 @@ const ExperienceSelector = ({
 		onClose: () => {
 			setOpenModal(false);
 			setEditingExperience({});
+			debouncedSetOpen(true);
 		},
 	});
 
@@ -116,10 +138,13 @@ const ExperienceSelector = ({
 		}
 	}, 100);
 
-	const handleDropdownButtonClick = () => debouncedSetOpen(!open);
-	const handleDropdownButtonBlur = () => debouncedSetOpen(false);
-	const handleDropdownBlur = () => debouncedSetOpen(false);
-	const handleDropdownFocus = () => debouncedSetOpen(true);
+	const experienceSelectorContentId = useId();
+
+	const memoizedDebouncedSetOpen = useCallback(
+		() => debouncedSetOpen(false),
+		[debouncedSetOpen]
+	);
+	useOnClickOutside(selectorRef, memoizedDebouncedSetOpen);
 
 	const handleNewSegmentClick = ({
 		experienceId,
@@ -265,18 +290,59 @@ const ExperienceSelector = ({
 		}
 	};
 
-	const handleOnNewExperiecneClick = () => setOpenModal(true);
+	const handleOnNewExperienceClick = () => {
+		setOpenModal(true);
+		debouncedSetOpen(false);
+	};
 
 	const handleEditExperienceClick = (experienceData) => {
 		const {name, segmentsEntryId, segmentsExperienceId} = experienceData;
 
 		setOpenModal(true);
+		debouncedSetOpen(false);
 
 		setEditingExperience({
 			name,
 			segmentsEntryId,
 			segmentsExperienceId,
 		});
+	};
+
+	const handleDropdownKeydown = (event) => {
+		if (event.key === 'Escape') {
+			buttonRef.current?.focus();
+		}
+		else if (event.key === 'Tab') {
+			const focusableElements = getKeyboardFocusableElements(
+				selectorRef.current
+			);
+
+			if (
+				event.shiftKey &&
+				focusableElements.indexOf(event.target) === 0
+			) {
+				event.preventDefault();
+
+				buttonRef.current?.focus();
+
+				return;
+			}
+
+			if (
+				focusableElements.indexOf(event.target) ===
+				focusableElements.length - 1
+			) {
+				event.preventDefault();
+
+				const allFocusableElements = getKeyboardFocusableElements(
+					document
+				);
+
+				const index = allFocusableElements.indexOf(buttonRef.current);
+
+				allFocusableElements[index + 1]?.focus();
+			}
+		}
 	};
 
 	const deleteExperience = (id) => {
@@ -351,12 +417,25 @@ const ExperienceSelector = ({
 	return (
 		<>
 			<ClayButton
+				aria-controls={experienceSelectorContentId}
+				aria-expanded={open}
+				aria-haspopup="true"
 				className="form-control-select pr-4 text-left text-truncate"
 				disabled={!canUpdateExperiences}
 				displayType="secondary"
 				id={selectId}
-				onBlur={handleDropdownButtonBlur}
-				onClick={handleDropdownButtonClick}
+				onClick={() => debouncedSetOpen(!open)}
+				onKeyDown={(event) => {
+					if (event.key === 'Tab' && !event.shiftKey && open) {
+						event.preventDefault();
+
+						const focusableElements = getKeyboardFocusableElements(
+							selectorRef.current
+						);
+
+						focusableElements[0]?.focus();
+					}
+				}}
 				ref={buttonRef}
 				small
 				type="button"
@@ -380,8 +459,9 @@ const ExperienceSelector = ({
 				<ReactPortal className="cadmin">
 					<div
 						className="dropdown-menu p-4 page-editor__toolbar-experience__dropdown-menu toggled"
-						onBlur={handleDropdownBlur}
-						onFocus={handleDropdownFocus}
+						id={experienceSelectorContentId}
+						onKeyDown={handleDropdownKeydown}
+						ref={selectorRef}
 						style={{
 							left: buttonBoundingClientRect.left,
 							top: buttonBoundingClientRect.bottom,
@@ -390,7 +470,7 @@ const ExperienceSelector = ({
 					>
 						<ExperiencesSelectorHeader
 							canCreateExperiences={canUpdateExperiences}
-							onNewExperience={handleOnNewExperiecneClick}
+							onNewExperience={handleOnNewExperienceClick}
 							showEmptyStateMessage={experiences.length <= 1}
 						/>
 
